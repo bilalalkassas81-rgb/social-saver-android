@@ -9,7 +9,10 @@ enum class Platform(val label: String) {
     OTHER("Web"),
 }
 
-enum class OptionKind { VIDEO, AUDIO, PHOTOS }
+enum class OptionKind { VIDEO, AUDIO, DIRECT }
+
+/** A file we can fetch directly by URL (photo posts, Instagram API, fxtwitter). */
+data class DirectItem(val url: String, val isVideo: Boolean)
 
 data class QualityOption(
     val label: String,
@@ -25,7 +28,7 @@ data class MediaInfo(
     val platform: Platform,
     val options: List<QualityOption>,
     val itemCount: Int = 1,
-    val photoUrls: List<String> = emptyList(),
+    val directItems: List<DirectItem> = emptyList(),
 )
 
 /** One entry of yt-dlp's "formats" list, reduced to what we need. */
@@ -38,8 +41,8 @@ data class RawFormat(
     val filesize: Long?,
 )
 
-/** Shown to the user as-is. */
-class UserFacingException(message: String) : Exception(message)
+/** Shown to the user as-is. [loginFor] means "logging in to this site would fix it". */
+class UserFacingException(message: String, val loginFor: Platform? = null) : Exception(message)
 
 fun formatBytes(bytes: Long?): String? {
     if (bytes == null || bytes <= 0) return null

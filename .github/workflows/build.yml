@@ -25,10 +25,12 @@ jobs:
           gradle-version: "8.9"
 
       - name: QA - run unit tests
-        run: gradle testReleaseUnitTest --stacktrace
+        shell: bash
+        run: gradle testReleaseUnitTest --stacktrace 2>&1 | tee -a build.log
 
       - name: Build APKs
-        run: gradle assembleRelease --stacktrace
+        shell: bash
+        run: gradle assembleRelease --stacktrace 2>&1 | tee -a build.log
 
       - name: Rename APKs
         run: |
@@ -51,3 +53,14 @@ jobs:
             Use SocialSaver-armv7.apk only if arm64 won't install (very old phones).
           files: SocialSaver-*.apk
           make_latest: true
+
+      - name: Publish the error log if the build failed
+        if: failure() && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: failed-${{ github.run_number }}
+          name: Failed build ${{ github.run_number }}
+          body: The build failed. The log is attached.
+          files: build.log
+          prerelease: true
+          make_latest: false

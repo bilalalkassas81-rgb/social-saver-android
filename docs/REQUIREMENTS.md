@@ -14,3 +14,9 @@
 **Out of scope for v1:** share-menu integration, batch downloads, Arabic UI, Play Store, login for private posts.
 
 **Known risks:** Instagram/Facebook often require login (v1 = public posts only). Photo-only posts use a fallback that may give lower resolution on Instagram/Facebook.
+
+## v1.1 changes (after first device test)
+- **Bug fix:** a Reel's cover image was saved instead of the video. Video posts never fall back to the cover image now.
+- **Login:** optional Instagram / Facebook login inside the app (their own login page; password never reaches the app). Downloads use the session; Instagram posts also come through Instagram's own API in original quality.
+- **X:** videos also work through the fallback, not just photos.
+- **New design:** own colour palette and headline font, bigger link panel, quality pills, gallery-style Saved screen, accounts in Settings.

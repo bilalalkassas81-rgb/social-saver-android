@@ -11,17 +11,18 @@ object Http {
     /** Social sites serve link-preview tags (og:image) to this crawler without a login. */
     const val PREVIEW_UA = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
 
-    private fun open(url: String, ua: String): HttpURLConnection =
+    private fun open(url: String, ua: String, headers: Map<String, String> = emptyMap()): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 30_000
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", ua)
             setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+            headers.forEach { (k, v) -> if (v.isNotEmpty()) setRequestProperty(k, v) }
         }
 
-    fun getText(url: String, ua: String): String {
-        val c = open(url, ua)
+    fun getText(url: String, ua: String, headers: Map<String, String> = emptyMap()): String {
+        val c = open(url, ua, headers)
         try {
             if (c.responseCode !in 200..299) throw IOException("HTTP ${c.responseCode}")
             return c.inputStream.bufferedReader().use { it.readText() }

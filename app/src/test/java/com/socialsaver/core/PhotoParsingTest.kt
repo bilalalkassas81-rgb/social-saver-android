@@ -1,7 +1,9 @@
 package com.socialsaver.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PhotoParsingTest {
@@ -22,12 +24,39 @@ class PhotoParsingTest {
             "media":{"photos":[{"url":"https://pbs.twimg.com/media/A.jpg"},{"url":"https://pbs.twimg.com/media/B.png"}]}}}"""
         val r = PhotoParsing.parseFxTwitter(json)
         assertEquals("NASA - Two pics", r.title)
-        assertEquals(2, r.photos.size)
-        assertEquals("https://pbs.twimg.com/media/B.png?name=orig", r.photos[1])
+        assertEquals(2, r.items.size)
+        assertEquals(DirectItem("https://pbs.twimg.com/media/B.png?name=orig", false), r.items[1])
+        assertEquals("https://pbs.twimg.com/media/A.jpg", r.thumbnail)
     }
 
-    @Test fun fxTwitterWithoutPhotos() {
-        assertEquals(0, PhotoParsing.parseFxTwitter("""{"code":404,"message":"NOT_FOUND"}""").photos.size)
+    @Test fun fxTwitterVideo() {
+        val json = """{"tweet":{"media":{"videos":[{"url":"https://video.twimg.com/v.mp4","thumbnail_url":"https://pbs.twimg.com/t.jpg"}]}}}"""
+        val r = PhotoParsing.parseFxTwitter(json)
+        assertEquals(listOf(DirectItem("https://video.twimg.com/v.mp4", true)), r.items)
+        assertEquals("https://pbs.twimg.com/t.jpg", r.thumbnail)
+    }
+
+    @Test fun fxTwitterWithoutMedia() {
+        assertEquals(0, PhotoParsing.parseFxTwitter("""{"code":404,"message":"NOT_FOUND"}""").items.size)
+    }
+
+    // Regression: v1 saved a Reel's cover image as if it were a photo.
+    @Test fun reelLinksAreVideos() {
+        assertTrue(PhotoParsing.urlLooksLikeVideo("https://www.instagram.com/reel/C1abc/?igsh=x"))
+        assertTrue(PhotoParsing.urlLooksLikeVideo("https://www.instagram.com/reels/C1abc/"))
+        assertTrue(PhotoParsing.urlLooksLikeVideo("https://www.instagram.com/someone/reel/C1abc/"))
+        assertTrue(PhotoParsing.urlLooksLikeVideo("https://www.instagram.com/tv/C1abc/"))
+        assertTrue(PhotoParsing.urlLooksLikeVideo("https://www.facebook.com/watch/?v=1"))
+        assertTrue(PhotoParsing.urlLooksLikeVideo("https://www.facebook.com/page/videos/123/"))
+        assertTrue(PhotoParsing.urlLooksLikeVideo("https://fb.watch/abc/"))
+        assertFalse(PhotoParsing.urlLooksLikeVideo("https://www.instagram.com/p/C1abc/"))
+        assertFalse(PhotoParsing.urlLooksLikeVideo("https://www.facebook.com/photo/?fbid=1"))
+    }
+
+    @Test fun videoPagesAreDetectedFromTags() {
+        assertTrue(PhotoParsing.isVideoPage("""<meta property="og:video" content="https://v.mp4">"""))
+        assertTrue(PhotoParsing.isVideoPage("""<meta property="og:type" content="video.other">"""))
+        assertFalse(PhotoParsing.isVideoPage("""<meta property="og:type" content="article"><meta property="og:image" content="https://a.jpg">"""))
     }
 
     @Test fun readsOpenGraphInAnyAttributeOrder() {

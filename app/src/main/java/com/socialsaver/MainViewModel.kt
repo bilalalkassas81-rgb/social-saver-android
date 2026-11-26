@@ -8,7 +8,10 @@ import com.socialsaver.core.HistoryItem
 import com.socialsaver.core.LinkCheck
 import com.socialsaver.core.LinkValidator
 import com.socialsaver.core.MediaInfo
+import com.socialsaver.core.Platform
 import com.socialsaver.core.UserFacingException
+import com.socialsaver.data.Account
+import com.socialsaver.data.Accounts
 import com.socialsaver.data.Engine
 import com.socialsaver.data.HistoryStore
 import com.socialsaver.data.MediaSaver
@@ -30,6 +33,7 @@ data class HomeState(
     val selected: Int = 0,
     val progress: Float? = null,
     val error: String? = null,
+    val loginFor: Platform? = null,
     val message: String? = null,
     val saved: List<SavedFile> = emptyList(),
 ) {
@@ -52,10 +56,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _settings = MutableStateFlow(SettingsState())
     val settings: StateFlow<SettingsState> = _settings.asStateFlow()
 
+    private val _accounts = MutableStateFlow<Set<Account>>(emptySet())
+    val accounts: StateFlow<Set<Account>> = _accounts.asStateFlow()
+
     private var job: Job? = null
 
     init {
         viewModelScope.launch { history.load() }
+        viewModelScope.launch { _accounts.value = Accounts.loggedIn() }
         // Warm up the engine (first launch unpacks Python + yt-dlp, takes a few seconds).
         viewModelScope.launch {
             val version = Engine.version(ctx)
@@ -82,7 +90,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        _home.update { it.copy(phase = Phase.IDLE, error = e.userMessage()) }
+                        _home.update {
+                            it.copy(phase = Phase.IDLE, error = e.userMessage(), loginFor = (e as? UserFacingException)?.loginFor)
+                        }
                     }
                 }
             }
@@ -142,6 +152,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newLink() {
         if (!_home.value.busy) _home.value = HomeState()
+    }
+
+    /** Called when the login screen closes. Retries the link if it failed because of a missing login. */
+    fun onLoginFinished() {
+        viewModelScope.launch {
+            _accounts.value = Accounts.loggedIn()
+            val waitingFor = _home.value.loginFor?.let { Account.forPlatform(it) }
+            if (waitingFor != null && waitingFor in _accounts.value) fetch()
+        }
+    }
+
+    fun logout(account: Account) {
+        viewModelScope.launch {
+            Accounts.logout(account)
+            _accounts.value = Accounts.loggedIn()
+        }
     }
 
     fun removeHistory(id: Long) {
