@@ -32,3 +32,6 @@
 - **In-app updates:** on every launch the app checks GitHub Releases. If a newer build exists, a popup offers **Update now** (downloads inside the app and opens Android's installer) or **Later**. Settings → About has **Check now**.
 - **About:** "Made by Bilkas Group".
 - Requires the repository to be public so the app can read the releases.
+
+## v1.3.1 fix
+- Play Protect blocked build-5, most likely because it asked for permission to install apps (REQUEST_INSTALL_PACKAGES). That permission is removed: **Update now** opens the APK link in the browser, which downloads and installs it.

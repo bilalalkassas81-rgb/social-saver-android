@@ -18,7 +18,6 @@ import com.socialsaver.data.HistoryStore
 import com.socialsaver.data.MediaSaver
 import com.socialsaver.data.SavedFile
 import com.socialsaver.data.Updater
-import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,10 +52,6 @@ data class SettingsState(
 data class UpdateState(
     val info: UpdateInfo? = null,
     val showDialog: Boolean = false,
-    val downloading: Boolean = false,
-    val progress: Float? = null,
-    val apk: File? = null,
-    val error: String? = null,
     val checking: Boolean = false,
     val checkMessage: String? = null,
 )
@@ -81,7 +76,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { history.load() }
-        Updater.cleanup(ctx)
         checkForUpdate(manual = false)
         viewModelScope.launch { _accounts.value = Accounts.loggedIn() }
         // Warm up the engine (first launch unpacks Python + yt-dlp, takes a few seconds).
@@ -194,12 +188,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Runs on every app start; [manual] is the "Check for updates" button in Settings. */
     fun checkForUpdate(manual: Boolean) {
-        if (_update.value.checking || _update.value.downloading) return
+        if (_update.value.checking) return
         _update.update { it.copy(checking = manual, checkMessage = null) }
         viewModelScope.launch {
             when (val r = Updater.check()) {
                 is Updater.Check.Available -> _update.update {
-                    it.copy(info = r.info, showDialog = true, checking = false, error = null)
+                    it.copy(info = r.info, showDialog = true, checking = false)
                 }
                 Updater.Check.UpToDate -> _update.update {
                     it.copy(checking = false, checkMessage = if (manual) "You have the latest version." else null)
@@ -212,24 +206,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissUpdate() = _update.update { it.copy(showDialog = false) }
-
-    /** Downloads the new APK; the screen then opens Android's installer. */
-    fun startUpdate() {
-        val state = _update.value
-        val info = state.info ?: return
-        if (state.downloading || state.apk != null) return
-        _update.update { it.copy(downloading = true, progress = 0f, error = null) }
-        viewModelScope.launch {
-            try {
-                val file = Updater.download(ctx, info) { p -> _update.update { s -> s.copy(progress = p) } }
-                _update.update { it.copy(downloading = false, apk = file) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _update.update { it.copy(downloading = false, error = "The download didn't finish. Check your connection, or get it from the download page.") }
-            }
-        }
-    }
 
     fun removeHistory(id: Long) {
         viewModelScope.launch { history.remove(id) }
