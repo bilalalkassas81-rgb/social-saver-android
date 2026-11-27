@@ -106,7 +106,24 @@ fun SettingsScreen(vm: MainViewModel, onLogin: (Platform) -> Unit) {
             }
         }
 
-        Text("Social Saver ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = muted)
+        Section("About", null) {
+            Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Social Saver", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = muted)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Made by", style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.weight(1f))
+                Text("Bilkas Group", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        Text(
+            "© Bilkas Group",
+            style = MaterialTheme.typography.bodySmall,
+            color = muted,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
     }
 
     if (confirmClear) {

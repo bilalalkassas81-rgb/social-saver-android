@@ -1,5 +1,7 @@
 # Social Saver (Android)
 
+Made by **Bilkas Group**.
+
 Paste an Instagram, Facebook or X link → pick a quality → download. Files go to `Downloads/SocialSaver`.
 
 ## Get the app on your phone
