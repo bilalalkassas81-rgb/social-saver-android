@@ -1,8 +1,10 @@
 package com.socialsaver.data
 
 import android.content.Context
+import com.socialsaver.core.CookieFile
 import com.socialsaver.core.ErrorText
 import com.socialsaver.core.InfoParser
+import com.socialsaver.core.InstagramParsing
 import com.socialsaver.core.MediaInfo
 import com.socialsaver.core.OptionKind
 import com.socialsaver.core.Platform
@@ -20,11 +22,14 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** yt-dlp (bundled through youtubedl-android) plus fallbacks for when it can't get a post. */
+/** yt-dlp (bundled through youtubedl-android) plus our own fetchers for when it can't get a post. */
 object Engine {
     private const val PROCESS_ID = "social-saver-download"
     private const val MAX_ITEMS = "1:20"
+    private const val UPDATE_EVERY_MS = 24L * 3600 * 1000
     private val initLock = Mutex()
+    /** yt-dlp must not run while it's being updated. */
+    private val ytdlpLock = Mutex()
     @Volatile private var ready = false
 
     suspend fun ensureReady(ctx: Context) = withContext(Dispatchers.IO) {
@@ -46,54 +51,80 @@ object Engine {
     }
 
     suspend fun fetch(ctx: Context, url: String, platform: Platform): MediaInfo {
-        ensureReady(ctx)
+        val log = mutableListOf<String>()
         val account = Account.forPlatform(platform)
         val cookieHeader = account?.let { Accounts.cookieHeader(it) }
-        val loggedIn = account != null && Accounts.isLoggedIn(account)
-        val cookies = Accounts.cookieFile(ctx)
+        val loggedIn = account != null && CookieFile.hasCookie(cookieHeader, account.sessionCookie)
 
-        return withContext(Dispatchers.IO) {
-            // 1. yt-dlp: real quality choices.
-            val failure: Exception? = try {
+        // Instagram: our own browser-style requests first. yt-dlp can't do logged-out Instagram on Android.
+        if (platform == Platform.INSTAGRAM) {
+            instagram(ctx, url, if (loggedIn) cookieHeader else null, log)?.let { return it }
+        }
+
+        ensureReady(ctx)
+        val cookies = Accounts.cookieFile(ctx)
+        var ytdlpError: String? = null
+        val viaYtdlp = withContext(Dispatchers.IO) {
+            try {
                 val request = YoutubeDLRequest(url)
                     .addOption("-J")
                     .addOption("--playlist-items", MAX_ITEMS)
                     .withCookies(cookies)
-                val info = InfoParser.parse(YoutubeDL.getInstance().execute(request).out, url, platform)
-                if (info.options.isNotEmpty()) return@withContext info
-                null
+                val out = ytdlpLock.withLock { YoutubeDL.getInstance().execute(request).out }
+                InfoParser.parse(out, url, platform).takeIf { it.options.isNotEmpty() }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                e
-            }
-
-            // 2. Fallbacks.
-            val fallback = runCatching {
-                when (platform) {
-                    Platform.INSTAGRAM ->
-                        if (loggedIn && cookieHeader != null) Fallbacks.instagram(url, cookieHeader)
-                        else Fallbacks.openGraphPhoto(url, platform)
-                    Platform.X -> Fallbacks.twitter(url)
-                    Platform.FACEBOOK -> Fallbacks.openGraphPhoto(url, platform)
-                    Platform.OTHER -> null
-                }
-            }.getOrNull()
-            if (fallback != null) return@withContext fallback
-
-            // 3. Explain what to do.
-            if (account != null && !loggedIn) {
-                throw UserFacingException(
-                    "${platform.label} wants you to be logged in to download this. Log in once and try again.",
-                    loginFor = platform,
-                )
-            }
-            throw when {
-                failure is UserFacingException -> failure
-                failure != null -> UserFacingException(ErrorText.friendly(failure.message))
-                else -> UserFacingException("No video or photo was found in this post.")
+                ytdlpError = (e as? UserFacingException)?.message ?: ErrorText.friendly(e.message)
+                log += "yt-dlp: ${e.message?.lines()?.lastOrNull { it.isNotBlank() }?.take(200)}"
+                null
             }
         }
+        if (viaYtdlp != null) return viaYtdlp
+
+        val fallback = withContext(Dispatchers.IO) {
+            runCatching {
+                when (platform) {
+                    Platform.X -> Fallbacks.twitter(url)
+                    Platform.INSTAGRAM, Platform.FACEBOOK -> Fallbacks.openGraphPhoto(url, platform)
+                    Platform.OTHER -> null
+                }
+            }.onFailure { log += "fallback: ${it.message}" }.getOrNull()
+        }
+        if (fallback != null) return fallback
+
+        val details = log.joinToString("\n").ifBlank { null }
+        if (account != null && !loggedIn) {
+            throw UserFacingException(
+                "${platform.label} didn't share this post with the app. It may be private, or ${platform.label} " +
+                    "is limiting requests from your connection for a while. Logging in usually gets around it.",
+                loginFor = platform,
+                details = details,
+            )
+        }
+        throw UserFacingException(ytdlpError ?: "No video or photo was found in this post.", details = details)
+    }
+
+    /** Logged in: Instagram's API. Logged out: GraphQL directly, then through an invisible browser. */
+    private suspend fun instagram(ctx: Context, url: String, cookieHeader: String?, log: MutableList<String>): MediaInfo? {
+        val code = InstagramParsing.shortcode(url) ?: return null // profiles, stories: leave to yt-dlp
+
+        if (cookieHeader != null) {
+            withContext(Dispatchers.IO) {
+                runCatching { Fallbacks.instagram(url, cookieHeader) }
+                    .onFailure { log += "account: ${it.message}" }.getOrNull()
+            }?.let { return it }
+        }
+
+        withContext(Dispatchers.IO) {
+            runCatching { InstagramPublic.fetch(url, log) }
+                .onFailure { log += "direct: ${it.javaClass.simpleName} ${it.message}" }.getOrNull()
+        }?.let { return Fallbacks.fromIgPost(url, it) }
+
+        val json = InstagramWeb.graphql(ctx, InstagramParsing.mediaId(code), log) ?: return null
+        val post = runCatching { InstagramParsing.parseGraphql(json) }.getOrNull()
+        if (post == null) log += "browser: answer had no media: ${json.take(150).replace('\n', ' ')}"
+        return post?.let { Fallbacks.fromIgPost(url, it) }
     }
 
     /** Downloads into a temp folder, then moves the results to Downloads/SocialSaver. */
@@ -103,16 +134,17 @@ object Engine {
         option: QualityOption,
         onProgress: (Float?) -> Unit,
     ): List<SavedFile> {
-        ensureReady(ctx)
+        if (option.kind != OptionKind.DIRECT) ensureReady(ctx)
         val cookies = if (option.kind == OptionKind.DIRECT) null else Accounts.cookieFile(ctx)
         return withContext(Dispatchers.IO) {
             val stamp = System.currentTimeMillis()
             val dir = File(ctx.cacheDir, "downloads/$stamp").apply { mkdirs() }
             try {
                 if (option.kind == OptionKind.DIRECT) {
-                    info.directItems.forEachIndexed { i, item ->
+                    val items = option.items.ifEmpty { info.directItems }
+                    items.forEachIndexed { i, item ->
                         ensureActive()
-                        onProgress(i.toFloat() / info.directItems.size)
+                        onProgress(i.toFloat() / items.size)
                         Fallbacks.downloadItem(item, dir, "${info.platform.label.lowercase()}_${stamp}_${i + 1}")
                     }
                     onProgress(1f)
@@ -130,8 +162,10 @@ object Engine {
                         request.addOption("-x").addOption("--audio-format", "mp3")
                     }
                     try {
-                        YoutubeDL.getInstance().execute(request, PROCESS_ID) { progress, _, _ ->
-                            if (progress >= 0f) onProgress((progress / 100f).coerceIn(0f, 1f))
+                        ytdlpLock.withLock {
+                            YoutubeDL.getInstance().execute(request, PROCESS_ID) { progress, _, _ ->
+                                if (progress >= 0f) onProgress((progress / 100f).coerceIn(0f, 1f))
+                            }
                         }
                     } catch (e: YoutubeDL.CanceledException) {
                         throw CancellationException("Download cancelled")
@@ -171,17 +205,30 @@ object Engine {
 
     suspend fun update(ctx: Context): String {
         ensureReady(ctx)
-        return withContext(Dispatchers.IO) {
-            try {
-                when (YoutubeDL.getInstance().updateYoutubeDL(ctx.applicationContext, YoutubeDL.UpdateChannel.STABLE)) {
-                    YoutubeDL.UpdateStatus.DONE ->
-                        "Updated to ${YoutubeDL.getInstance().version(ctx.applicationContext) ?: "the latest version"}."
-                    YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE -> "Already up to date."
-                    null -> "Update finished."
+        val message = withContext(Dispatchers.IO) {
+            ytdlpLock.withLock {
+                try {
+                    when (YoutubeDL.getInstance().updateYoutubeDL(ctx.applicationContext, YoutubeDL.UpdateChannel.STABLE)) {
+                        YoutubeDL.UpdateStatus.DONE ->
+                            "Updated to ${YoutubeDL.getInstance().version(ctx.applicationContext) ?: "the latest version"}."
+                        YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE -> "Already up to date."
+                        null -> "Update finished."
+                    }
+                } catch (e: Exception) {
+                    throw UserFacingException("Update failed. Check your internet connection and try again.")
                 }
-            } catch (e: Exception) {
-                throw UserFacingException("Update failed. Check your internet connection and try again.")
             }
         }
+        prefs(ctx).edit().putLong("last_update", System.currentTimeMillis()).apply()
+        return message
     }
+
+    /** Keeps yt-dlp fresh on its own: at most once a day, silently. */
+    suspend fun autoUpdateIfDue(ctx: Context) {
+        val last = prefs(ctx).getLong("last_update", 0L)
+        if (System.currentTimeMillis() - last < UPDATE_EVERY_MS) return
+        runCatching { update(ctx) }
+    }
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("engine", Context.MODE_PRIVATE)
 }

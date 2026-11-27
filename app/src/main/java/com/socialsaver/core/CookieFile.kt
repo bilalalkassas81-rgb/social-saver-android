@@ -10,6 +10,18 @@ object CookieFile {
             if (i <= 0) null else part.substring(0, i).trim() to part.substring(i + 1).trim()
         }.filter { it.first.isNotEmpty() }
 
+    /** "name=value; Path=/; ..." from a Set-Cookie header. Null for deletions. */
+    fun parseSetCookie(header: String): Pair<String, String>? {
+        val first = header.substringBefore(';')
+        val i = first.indexOf('=')
+        if (i <= 0) return null
+        val name = first.substring(0, i).trim()
+        val value = first.substring(i + 1).trim().removeSurrounding("\"")
+        val lower = header.lowercase()
+        if (value.isEmpty() || "max-age=0" in lower || "expires=thu, 01 jan 1970" in lower) return null
+        return name to value
+    }
+
     fun hasCookie(cookieHeader: String?, name: String): Boolean =
         parseHeader(cookieHeader).any { it.first == name && it.second.isNotEmpty() }
 

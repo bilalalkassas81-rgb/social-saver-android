@@ -32,4 +32,12 @@ class CookieFileTest {
             text,
         )
     }
+
+    @Test fun readsSetCookieHeaders() {
+        assertEquals("csrftoken" to "abc", CookieFile.parseSetCookie("csrftoken=abc; Domain=.instagram.com; Path=/; Secure"))
+        assertEquals("mid" to "Z1", CookieFile.parseSetCookie("mid=\"Z1\"; Path=/"))
+        assertEquals(null, CookieFile.parseSetCookie("sessionid=\"\"; Max-Age=0; Path=/"))
+        assertEquals(null, CookieFile.parseSetCookie("x=1; expires=Thu, 01 Jan 1970 00:00:00 GMT"))
+        assertEquals(null, CookieFile.parseSetCookie("garbage"))
+    }
 }

@@ -20,3 +20,10 @@
 - **Login:** optional Instagram / Facebook login inside the app (their own login page; password never reaches the app). Downloads use the session; Instagram posts also come through Instagram's own API in original quality.
 - **X:** videos also work through the fallback, not just photos.
 - **New design:** own colour palette and headline font, bigger link panel, quality pills, gallery-style Saved screen, accounts in Settings.
+
+## v1.2 changes
+- **Instagram without login.** Root cause: yt-dlp only downloads logged-out Instagram posts when it can impersonate a real browser (curl_cffi), which isn't available on Android. The app now makes the same requests instagram.com makes in a browser: first directly, then inside an invisible WebView (the phone's own Chrome) as a backup. Login stays as an optional last resort.
+- **Quality choice for Instagram** from the sizes Instagram serves.
+- **Engine updates itself** once a day.
+- **"Details" on errors** so failures can be copied and sent for diagnosis.
+- **App icon** now uses the app's own indigo + coral.

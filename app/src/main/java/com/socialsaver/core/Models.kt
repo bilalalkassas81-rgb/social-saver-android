@@ -19,6 +19,8 @@ data class QualityOption(
     val selector: String,
     val kind: OptionKind,
     val sizeBytes: Long? = null,
+    /** For DIRECT options: exactly which files this choice downloads. */
+    val items: List<DirectItem> = emptyList(),
 )
 
 data class MediaInfo(
@@ -42,7 +44,12 @@ data class RawFormat(
 )
 
 /** Shown to the user as-is. [loginFor] means "logging in to this site would fix it". */
-class UserFacingException(message: String, val loginFor: Platform? = null) : Exception(message)
+class UserFacingException(
+    message: String,
+    val loginFor: Platform? = null,
+    /** Technical trail of what was tried, shown under "Details" so it can be sent to the developer. */
+    val details: String? = null,
+) : Exception(message)
 
 fun formatBytes(bytes: Long?): String? {
     if (bytes == null || bytes <= 0) return null

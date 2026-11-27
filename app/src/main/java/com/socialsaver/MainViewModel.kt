@@ -34,6 +34,7 @@ data class HomeState(
     val progress: Float? = null,
     val error: String? = null,
     val loginFor: Platform? = null,
+    val details: String? = null,
     val message: String? = null,
     val saved: List<SavedFile> = emptyList(),
 ) {
@@ -66,8 +67,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { _accounts.value = Accounts.loggedIn() }
         // Warm up the engine (first launch unpacks Python + yt-dlp, takes a few seconds).
         viewModelScope.launch {
-            val version = Engine.version(ctx)
-            _settings.update { it.copy(engineVersion = version) }
+            _settings.update { it.copy(engineVersion = Engine.version(ctx)) }
+            Engine.autoUpdateIfDue(ctx)
+            _settings.update { it.copy(engineVersion = Engine.version(ctx)) }
         }
     }
 
@@ -91,7 +93,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         throw e
                     } catch (e: Exception) {
                         _home.update {
-                            it.copy(phase = Phase.IDLE, error = e.userMessage(), loginFor = (e as? UserFacingException)?.loginFor)
+                            val ufe = e as? UserFacingException
+                            it.copy(phase = Phase.IDLE, error = e.userMessage(), loginFor = ufe?.loginFor, details = ufe?.details)
                         }
                     }
                 }

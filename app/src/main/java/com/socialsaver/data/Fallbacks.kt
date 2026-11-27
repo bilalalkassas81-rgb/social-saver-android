@@ -28,9 +28,18 @@ object Fallbacks {
                 "Referer" to "https://www.instagram.com/",
             ),
         )
-        val post = InstagramParsing.parseMediaInfo(json) ?: return null
-        return directInfo(url, Platform.INSTAGRAM, post.title, post.thumbnail, post.items)
+        return InstagramParsing.parseMediaInfo(json)?.let { fromIgPost(url, it) }
     }
+
+    fun fromIgPost(url: String, post: InstagramParsing.IgPost) = MediaInfo(
+        url = url,
+        title = post.title,
+        thumbnail = post.thumbnail ?: post.items.firstOrNull { !it.isVideo }?.url,
+        platform = Platform.INSTAGRAM,
+        options = InstagramParsing.options(post),
+        itemCount = post.items.size,
+        directItems = post.items,
+    )
 
     /** X photos and videos through the public fxtwitter API (no login needed). */
     fun twitter(url: String): MediaInfo? {
@@ -57,8 +66,8 @@ object Fallbacks {
         val videos = items.count { it.isVideo }
         val photos = items.size - videos
         val label = when {
-            items.size == 1 && videos == 1 -> "Video (original quality)"
-            items.size == 1 -> "Photo (original quality)"
+            items.size == 1 && videos == 1 -> "Best quality"
+            items.size == 1 -> "Photo, full size"
             videos == 0 -> "All $photos photos"
             photos == 0 -> "All $videos videos"
             else -> "All ${items.size} items"
@@ -68,7 +77,7 @@ object Fallbacks {
             title = title ?: "${platform.label} post",
             thumbnail = thumb ?: items.firstOrNull { !it.isVideo }?.url,
             platform = platform,
-            options = listOf(QualityOption(label, "", OptionKind.DIRECT)),
+            options = listOf(QualityOption(label, "", OptionKind.DIRECT, items = items)),
             itemCount = items.size,
             directItems = items,
         )

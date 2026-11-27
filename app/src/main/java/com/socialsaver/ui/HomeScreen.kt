@@ -41,6 +41,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +52,7 @@ import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,7 +81,7 @@ fun HomeScreen(vm: MainViewModel, onLogin: (Platform) -> Unit) {
     ) {
         Text("Social Saver", style = MaterialTheme.typography.titleLarge)
         LinkPanel(s, vm)
-        s.error?.let { ErrorNote(it, s.loginFor, onLogin) }
+        s.error?.let { ErrorNote(it, s.loginFor, s.details, onLogin) }
         s.info?.let { info ->
             MediaPreview(info)
             QualityPills(info.options, s.selected, enabled = !s.busy, onSelect = vm::select)
@@ -162,16 +166,40 @@ private fun LinkPanel(s: HomeState, vm: MainViewModel) {
 }
 
 @Composable
-private fun ErrorNote(message: String, loginFor: Platform?, onLogin: (Platform) -> Unit) {
+private fun ErrorNote(message: String, loginFor: Platform?, details: String?, onLogin: (Platform) -> Unit) {
     val c = MaterialTheme.colorScheme
+    val clipboard = LocalClipboardManager.current
+    var showDetails by remember { mutableStateOf(false) }
     Surface(color = c.errorContainer, contentColor = c.onErrorContainer, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(message, style = MaterialTheme.typography.bodyMedium)
-            if (loginFor != null) {
-                Button(
-                    onClick = { onLogin(loginFor) },
-                    colors = ButtonDefaults.buttonColors(containerColor = c.onErrorContainer, contentColor = c.errorContainer),
-                ) { Text("Log in to ${loginFor.label}") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (loginFor != null) {
+                    Button(
+                        onClick = { onLogin(loginFor) },
+                        colors = ButtonDefaults.buttonColors(containerColor = c.onErrorContainer, contentColor = c.errorContainer),
+                    ) { Text("Log in to ${loginFor.label}") }
+                }
+                if (details != null) {
+                    TextButton(
+                        onClick = { showDetails = !showDetails },
+                        colors = ButtonDefaults.textButtonColors(contentColor = c.onErrorContainer),
+                    ) { Text(if (showDetails) "Hide details" else "Details") }
+                }
+            }
+            if (showDetails && details != null) {
+                Text(
+                    details,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(c.onErrorContainer.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                )
+                TextButton(
+                    onClick = { clipboard.setText(AnnotatedString(details)) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = c.onErrorContainer),
+                ) { Text("Copy details") }
             }
         }
     }

@@ -81,7 +81,7 @@ fun SettingsScreen(vm: MainViewModel, onLogin: (Platform) -> Unit) {
             }
         }
 
-        Section("Download engine", "Sites change often. If downloads stop working, update the engine.") {
+        Section("Download engine", "Updates itself once a day. Tap Update if a site just stopped working.") {
             Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("yt-dlp", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
