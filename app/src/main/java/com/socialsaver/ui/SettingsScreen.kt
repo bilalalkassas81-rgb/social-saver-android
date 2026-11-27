@@ -45,6 +45,7 @@ import com.socialsaver.data.MediaSaver
 fun SettingsScreen(vm: MainViewModel, onLogin: (Platform) -> Unit) {
     val s by vm.settings.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
+    val update by vm.update.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -110,6 +111,20 @@ fun SettingsScreen(vm: MainViewModel, onLogin: (Platform) -> Unit) {
             Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Social Saver", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = muted)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Updates", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        update.checkMessage ?: "Checked every time you open the app.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = muted,
+                    )
+                }
+                OutlinedButton(onClick = { vm.checkForUpdate(manual = true) }, enabled = !update.checking) {
+                    Text(if (update.checking) "Checking…" else "Check now")
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {

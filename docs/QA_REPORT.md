@@ -1,7 +1,7 @@
 # QA Report: v1
 
 ## Automated tests (run on every push by GitHub Actions)
-52 unit tests, all passing (v1.2), plus a simulated run of the in-browser script:
+56 unit tests, all passing (v1.3), plus a simulated run of the in-browser script:
 
 | Area | Tests | Covers |
 |---|---|---|
@@ -12,6 +12,7 @@
 | ErrorText | 6 | Login/rate-limit, unsupported, no video, network, unknown errors |
 | InstagramParsing | 10 | Shortcodes, media id (checked against yt-dlp), session token, logged-out GraphQL reel, quality list, carousels |
 | CookieFile | 4 | Login session detection, cookie file for yt-dlp |
+| UpdateParsing | 4 | Newer build offered, right APK per phone, same/older/failed builds ignored |
 | HistoryCodec | 3 | Save/load round trip (incl. Arabic text), corrupt file, invalid entries |
 
 ## Manual checklist (on your phone)
@@ -30,3 +31,6 @@
 - [ ] Random text in link box → "doesn't look like a link"
 - [ ] History: open, share, remove; Clear history keeps files
 - [ ] Settings → Update engine works
+- [ ] Open an older build → "Update available" popup → Update now → installer opens → app updated, Saved list kept
+- [ ] Later → popup closes, comes back next launch
+- [ ] Settings → About → Check now → "You have the latest version"

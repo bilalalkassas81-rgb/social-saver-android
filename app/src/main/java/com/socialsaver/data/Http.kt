@@ -76,11 +76,24 @@ object Http {
     }
 
     /** Downloads to [dest] and returns the Content-Type header. */
-    fun download(url: String, dest: File, ua: String = BROWSER_UA): String? {
+    fun download(url: String, dest: File, ua: String = BROWSER_UA, onProgress: ((Float?) -> Unit)? = null): String? {
         val c = open(url, ua)
         try {
             if (c.responseCode !in 200..299) throw IOException("HTTP ${c.responseCode}")
-            c.inputStream.use { input -> dest.outputStream().use { input.copyTo(it) } }
+            val total = c.contentLengthLong
+            var done = 0L
+            c.inputStream.use { input ->
+                dest.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        onProgress?.invoke(if (total > 0) done.toFloat() / total else null)
+                    }
+                }
+            }
             return c.contentType
         } finally {
             c.disconnect()

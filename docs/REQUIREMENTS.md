@@ -27,3 +27,8 @@
 - **Engine updates itself** once a day.
 - **"Details" on errors** so failures can be copied and sent for diagnosis.
 - **App icon** now uses the app's own indigo + coral.
+
+## v1.3 changes
+- **In-app updates:** on every launch the app checks GitHub Releases. If a newer build exists, a popup offers **Update now** (downloads inside the app and opens Android's installer) or **Later**. Settings → About has **Check now**.
+- **About:** "Made by Bilkas Group".
+- Requires the repository to be public so the app can read the releases.

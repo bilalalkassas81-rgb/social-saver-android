@@ -40,6 +40,8 @@ import com.socialsaver.ui.HomeScreen
 import com.socialsaver.ui.LoginActivity
 import com.socialsaver.ui.SettingsScreen
 import com.socialsaver.ui.SocialSaverTheme
+import com.socialsaver.ui.UpdateDialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +68,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         Account.forPlatform(platform)?.let { loginLauncher.launch(LoginActivity.intent(ctx, it)) }
     }
     LegacyStoragePermission()
+    val update by vm.update.collectAsStateWithLifecycle()
+    UpdateDialog(vm, update)
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {

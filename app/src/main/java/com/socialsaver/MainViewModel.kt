@@ -9,6 +9,7 @@ import com.socialsaver.core.LinkCheck
 import com.socialsaver.core.LinkValidator
 import com.socialsaver.core.MediaInfo
 import com.socialsaver.core.Platform
+import com.socialsaver.core.UpdateInfo
 import com.socialsaver.core.UserFacingException
 import com.socialsaver.data.Account
 import com.socialsaver.data.Accounts
@@ -16,6 +17,8 @@ import com.socialsaver.data.Engine
 import com.socialsaver.data.HistoryStore
 import com.socialsaver.data.MediaSaver
 import com.socialsaver.data.SavedFile
+import com.socialsaver.data.Updater
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +50,17 @@ data class SettingsState(
     val updateMessage: String? = null,
 )
 
+data class UpdateState(
+    val info: UpdateInfo? = null,
+    val showDialog: Boolean = false,
+    val downloading: Boolean = false,
+    val progress: Float? = null,
+    val apk: File? = null,
+    val error: String? = null,
+    val checking: Boolean = false,
+    val checkMessage: String? = null,
+)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<App>()
     val history: HistoryStore = getApplication<App>().history
@@ -60,10 +74,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _accounts = MutableStateFlow<Set<Account>>(emptySet())
     val accounts: StateFlow<Set<Account>> = _accounts.asStateFlow()
 
+    private val _update = MutableStateFlow(UpdateState())
+    val update: StateFlow<UpdateState> = _update.asStateFlow()
+
     private var job: Job? = null
 
     init {
         viewModelScope.launch { history.load() }
+        Updater.cleanup(ctx)
+        checkForUpdate(manual = false)
         viewModelScope.launch { _accounts.value = Accounts.loggedIn() }
         // Warm up the engine (first launch unpacks Python + yt-dlp, takes a few seconds).
         viewModelScope.launch {
@@ -170,6 +189,45 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             Accounts.logout(account)
             _accounts.value = Accounts.loggedIn()
+        }
+    }
+
+    /** Runs on every app start; [manual] is the "Check for updates" button in Settings. */
+    fun checkForUpdate(manual: Boolean) {
+        if (_update.value.checking || _update.value.downloading) return
+        _update.update { it.copy(checking = manual, checkMessage = null) }
+        viewModelScope.launch {
+            when (val r = Updater.check()) {
+                is Updater.Check.Available -> _update.update {
+                    it.copy(info = r.info, showDialog = true, checking = false, error = null)
+                }
+                Updater.Check.UpToDate -> _update.update {
+                    it.copy(checking = false, checkMessage = if (manual) "You have the latest version." else null)
+                }
+                is Updater.Check.Failed -> _update.update {
+                    it.copy(checking = false, checkMessage = if (manual) "Couldn't check for updates. Try again later." else null)
+                }
+            }
+        }
+    }
+
+    fun dismissUpdate() = _update.update { it.copy(showDialog = false) }
+
+    /** Downloads the new APK; the screen then opens Android's installer. */
+    fun startUpdate() {
+        val state = _update.value
+        val info = state.info ?: return
+        if (state.downloading || state.apk != null) return
+        _update.update { it.copy(downloading = true, progress = 0f, error = null) }
+        viewModelScope.launch {
+            try {
+                val file = Updater.download(ctx, info) { p -> _update.update { s -> s.copy(progress = p) } }
+                _update.update { it.copy(downloading = false, apk = file) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _update.update { it.copy(downloading = false, error = "The download didn't finish. Check your connection, or get it from the download page.") }
+            }
         }
     }
 
